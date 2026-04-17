@@ -284,24 +284,24 @@ class GeneralMotionRetargeting:
         return offset_human_data
             
     def offset_human_data_to_ground(self, human_data):
-        """find the lowest point of the human data and offset the human data to the ground"""
-        offset_human_data = {}
-        ground_offset = 0.1
+        """Clamp: only shift up when the lowest foot goes below ground_offset.
+        During jumps (feet above ground), leave everything untouched."""
+        ground_offset = 0.053
         lowest_pos = np.inf
 
         for body_name in human_data.keys():
-            # only consider the foot/Foot
             if "Foot" not in body_name and "foot" not in body_name:
                 continue
             pos, quat = human_data[body_name]
             if pos[2] < lowest_pos:
                 lowest_pos = pos[2]
-                lowest_body_name = body_name
-        for body_name in human_data.keys():
-            pos, quat = human_data[body_name]
-            offset_human_data[body_name] = [pos, quat]
-            offset_human_data[body_name][0] = pos - np.array([0, 0, lowest_pos]) + np.array([0, 0, ground_offset])
-        return offset_human_data
+
+        if lowest_pos < ground_offset:
+            correction = np.array([0, 0, ground_offset - lowest_pos])
+            for body_name in human_data.keys():
+                human_data[body_name][0] = human_data[body_name][0] + correction
+
+        return human_data
 
     def set_ground_offset(self, ground_offset):
         self.ground_offset = ground_offset

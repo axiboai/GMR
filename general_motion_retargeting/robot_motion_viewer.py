@@ -1,5 +1,7 @@
 import os
 import time
+import xml.etree.ElementTree as ET
+import tempfile
 import mujoco as mj
 import mujoco.viewer as mjv
 import imageio
@@ -48,6 +50,7 @@ class RobotMotionViewer:
                 camera_follow=True,
                 motion_fps=30,
                 transparent_robot=0,
+                ground_plane=False,
                 # video recording
                 record_video=False,
                 video_path=None,
@@ -58,7 +61,32 @@ class RobotMotionViewer:
         
         self.robot_type = robot_type
         self.xml_path = ROBOT_XML_DICT[robot_type]
-        self.model = mj.MjModel.from_xml_path(str(self.xml_path))
+
+        if ground_plane:
+            tree = ET.parse(str(self.xml_path))
+            root_el = tree.getroot()
+            wb = root_el.find("worldbody")
+            gnd = ET.SubElement(wb, "geom")
+            gnd.set("name", "_viewer_ground")
+            gnd.set("type", "plane")
+            gnd.set("size", "5 5 0.01")
+            gnd.set("pos", "0 0 0")
+            gnd.set("rgba", "0.3 0.3 0.3 1")
+            gnd.set("contype", "0")
+            gnd.set("conaffinity", "0")
+            light = ET.SubElement(wb, "light")
+            light.set("pos", "0 0 3")
+            light.set("dir", "0 0 -1")
+            light.set("diffuse", "0.8 0.8 0.8")
+            xml_dir = os.path.dirname(os.path.abspath(str(self.xml_path)))
+            tmp_fd, tmp_path = tempfile.mkstemp(suffix=".xml", dir=xml_dir)
+            tree.write(tmp_path)
+            os.close(tmp_fd)
+            self.model = mj.MjModel.from_xml_path(tmp_path)
+            os.unlink(tmp_path)
+        else:
+            self.model = mj.MjModel.from_xml_path(str(self.xml_path))
+
         self.data = mj.MjData(self.model)
         self.robot_base = ROBOT_BASE_DICT[robot_type]
         self.viewer_cam_distance = VIEWER_CAM_DISTANCE_DICT[robot_type]
@@ -128,7 +156,7 @@ class RobotMotionViewer:
             self.viewer.cam.distance = self.viewer_cam_distance
             self.viewer.cam.elevation = -10  # 正面视角，轻微向下看
             # self.viewer.cam.azimuth = 180    # 正面朝向机器人
-        
+
         if human_motion_data is not None:
             # Clean custom geometry
             self.viewer.user_scn.ngeom = 0
